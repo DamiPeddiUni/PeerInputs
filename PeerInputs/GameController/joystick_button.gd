@@ -5,7 +5,7 @@ var boundary = 150;
 
 var ongoing_drag = -1;
 
-var return_accell = 20;
+var return_accell = 30;
 
 var threshold = 50;
 
