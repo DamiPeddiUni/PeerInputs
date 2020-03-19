@@ -5,8 +5,8 @@ var velocity = Vector2.ZERO;
 var oldSentStuff = Vector2.ZERO;
 var myID = "";
 
-onready var joystick = get_node("CanvasLayer/JoyPad/joystick/joystick_button");
-
+onready var joystick = get_parent().get_node("CanvasLayer/JoyPad/joystick/joystick_button");
+onready var textEdit = get_parent().get_node("CanvasLayer/TextEdit");
 func _ready():
 	pass
 	
@@ -15,7 +15,7 @@ func _process(delta):
 	
 func _on_ConnectBtn_pressed():
 	var network = NetworkedMultiplayerENet.new();
-	network.create_client($CanvasLayer/TextEdit.text, 4242);
+	network.create_client(textEdit.text, 4242);
 	get_tree().set_network_peer(network);
 	network.connect("connection_failed", self, "_on_connection_failed");
 	network.connect("peer_disconnected", self, "_on_disconnected");

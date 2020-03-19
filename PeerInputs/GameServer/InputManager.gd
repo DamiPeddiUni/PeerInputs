@@ -1,7 +1,7 @@
 extends Node
 
-onready var p1 = $P1;
-onready var p2 = $P2;
+onready var p1 = get_parent().get_node("P1");
+onready var p2 = get_parent().get_node("P2");
 
 var players = [0, 0]; #lo zero rappresenta un posto libero.
 var velocity = [Vector2.ZERO, Vector2.ZERO];
