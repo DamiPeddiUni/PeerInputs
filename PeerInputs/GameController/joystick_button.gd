@@ -7,7 +7,7 @@ var ongoing_drag = -1;
 
 var return_accell = 30;
 
-var threshold = 50;
+var threshold = 25;
 
 func get_button_pos():
 	return position + radius;
