@@ -24,9 +24,14 @@ func _process(delta):
 		position += pos_difference * return_accell * delta;
 
 func _input(event):
+	if event is InputEventScreenDrag or (event is InputEventScreenTouch ):
+		if event.position.x > joyPadSize.y:
+			return
+		
+		
 	if joypadState == enumState.state_released:
 		joypadState = enumState.state_notPressed
-		
+		 
 	if event is InputEventScreenDrag or (event is InputEventScreenTouch and event.is_pressed()):
 		if (joypadState == enumState.state_notPressed):
 			joypadState = enumState.state_justPressed
@@ -45,14 +50,18 @@ func _input(event):
 			get_parent().global_position = Vector2(x,y)
 		elif joypadState == enumState.state_justPressed:
 			joypadState = enumState.state_pressed
+
 			
 		var event_dist_from_center = (event.position - get_parent().global_position).length();
 		if event_dist_from_center <= boundary * global_scale.x or event.get_index() == ongoing_drag:
+			
 			set_global_position(event.position - radius * global_scale);
 			if get_button_pos().length() > boundary:
 				set_position(get_button_pos().normalized() * boundary - radius);
 			ongoing_drag = event.get_index();
+	
 	if event is InputEventScreenTouch and !event.is_pressed():
+		 
 		joypadState = enumState.state_released
 		if event.get_index() == ongoing_drag:
 			ongoing_drag = -1;
