@@ -10,80 +10,146 @@ onready var textEdit = get_parent().get_node("CanvasLayer/ConnectPanel/TextEdit"
 onready var Joystick_PANEL = get_parent().get_node("CanvasLayer/JoyPad");
 onready var Buttons_PANEL = get_parent().get_node("CanvasLayer/AB_Buttons");
 onready var Connect_PANEL = get_parent().get_node("CanvasLayer/ConnectPanel");
-onready var BigButton_PANEL = get_parent().get_node("CanvasLayer/BigButton");
+onready var BigButton_PANEL = get_parent().get_node("CanvasLayer/BigBtn");
+
+signal connected
+
+var isDemo = true
+var udp := PacketPeerUDP.new()
+var connected = false
+onready var pingTime = OS.get_ticks_msec() 
+var prevCmd = "cmd:"
+
+
+enum enumState { state_notPressed,state_justPressed,state_pressed,state_released}
+ 
+var buttonA   = enumState.state_notPressed
+var buttonB   = enumState.state_notPressed
+var bigButtonState = enumState.state_notPressed
+var startBigButtonPressedTime
+
+
+var quadrantVibrationTime : int = 40
+var oldQuadrant = -1
+var ipAddress = "192.168.1.68"
 
 func _ready():
 	Joystick_PANEL.set_visible(false);
 	Buttons_PANEL.set_visible(false);
 	BigButton_PANEL.set_visible(false);
 	Connect_PANEL.set_visible(true);
-	
-	pass
-	
+
 func _process(delta):
-	send_stuff("position", joystick.get_value());
+	sendData();
+	checkForMessages()
+	checkServerAlive()
 	
 func _on_ConnectBtn_pressed():
-	var network = NetworkedMultiplayerENet.new();
-	network.create_client(textEdit.text, 4242);
-	get_tree().set_network_peer(network);
-	network.connect("connection_failed", self, "_on_connection_failed");
-	#$CanvasLayer/ConnectBtn.set_disabled(true);
-	get_tree().multiplayer.connect("network_peer_packet", self, "_on_packet_received");
-	myID = get_tree().get_network_unique_id();
-	print(myID);
 	
-	
-func _on_connection_failed(error):
-	$CanvasLayer/ConnectBtn.set_disabled(false);
-	print(error);
+	udp.connect_to_host(textEdit.text, 4242)
+	if !connected:
+		# Try to contact server
+		udp.put_packet("Connection request".to_utf8())
+		yield(get_tree().create_timer(0.5), "timeout")
 
-func _on_packet_received(id, packet):
-	if packet.get_string_from_ascii() == str(myID):
-		Joystick_PANEL.set_visible(true);
-		Buttons_PANEL.set_visible(false);
-		BigButton_PANEL.set_visible(true);
-		Connect_PANEL.set_visible(false);
-	pass
-	
+		if udp.get_available_packet_count() > 0 or isDemo:
+			myID = udp.get_packet().get_string_from_utf8()
+			ipAddress = textEdit.text
+			print("Connected to the server: %s" % myID)
+			connected = true
+			pingTime = OS.get_ticks_msec() 
+			emit_signal("connected")
+			Joystick_PANEL.set_visible(true);
+			Buttons_PANEL.set_visible(false);
+			BigButton_PANEL.set_visible(true);
+			Connect_PANEL.set_visible(false);	
+			 
+			print(myID);
+		else:
+			print("server not found")
+ 
 func disconnectClient():
-	get_tree().set_network_peer(null);
+	connected = false  
+	get_tree().reload_current_scene();
+	print(ipAddress)
+	textEdit.set_text(ipAddress)
+	
 
-
-
-func send_stuff(type, data):
-	if type == "position":
-		if get_tree().get_network_peer() == null || data == oldSentPos:
-			return;
-		oldSentPos = data;
-		rpc_unreliable_id(1, "receive_position", myID, data);
+func checkServerAlive():
+	if (connected):
+		var timeNow = OS.get_ticks_msec()
+		if (timeNow - pingTime> 10000):
+			print("SERVER DISCONNECTED!")
+			disconnectClient()
 		
-	if type == "button_input":
-		if get_tree().get_network_peer() == null:
-			return;
-		rpc_unreliable_id(1, "receive_button_input", myID, data); # "a" o "b"
+		
+func checkForMessages():
+	if udp.get_available_packet_count() > 0:
+		var msg = udp.get_packet().get_string_from_utf8()
+		print("received: %s" % msg)
+		if msg == "ping":
+			pingTime = OS.get_ticks_msec() 			
+		if msg == "vibrate":
+			Input.vibrate_handheld(200)
+
+func sendData():
 	
-	if type == "big_button":
-		if get_tree().get_network_peer() == null:
-			return;
-		rpc_unreliable_id(1, "receive_big_button_input", myID, data); # "bb"
+	if !connected:
+		return;
+	
+	var data = joystick.get_value()
+
+	handleVibration(data)
+	var stringCmd = "cmd:" + var2str(data) + ":"+ var2str(bigButtonState)
+
+	if ( prevCmd != stringCmd ):
+		udp.put_packet(stringCmd.to_utf8())
+		prevCmd = stringCmd
+	oldSentPos = data;
 	
 
+func handleVibration(data):
+	if (oldSentPos != data):
+		var quadrant = computeQuadrant(data)
+		if quadrant != oldQuadrant:
+			Input.vibrate_handheld(quadrantVibrationTime)
+			print("vibrate" + str(quadrant))
+		oldQuadrant = quadrant
 
+func computeQuadrant(data):
+	var angles =  [ -PI, -0.75*PI, - PI/2,  -PI/4,  0, PI/4, PI/2, 0.75*PI ]
+	 
+	var angle = atan2(data[1],data[0])
+
+	var q = 0
+	for i in angles:
+		if angle > i:
+			q+=1	
+	return q
+	
+	
 func _on_A_Button_pressed():
-	send_stuff("button_input", "a");
-
+	buttonA = enumState.state_pressed
 
 func _on_B_Button_pressed():
-	send_stuff("button_input", "b");
-
-
-func _on_BigBtn_pressed():
-	#OS.vibrate_handheld(500);
-	send_stuff("big_button", "bb");
-
-
+	buttonB = enumState.state_pressed
 
 func _on_RefreshBtn_pressed():
+	udp.put_packet("disconnect:".to_utf8())
 	disconnectClient();
-	get_tree().reload_current_scene();
+	
+	
+func _on_BigBtn_pressed():
+	startBigButtonPressedTime = OS.get_ticks_msec()
+	if (bigButtonState == enumState.state_justPressed):
+		bigButtonState = enumState.state_pressed
+	else:
+		bigButtonState = enumState.state_justPressed
+
+func _on_BigBtn_released():
+	bigButtonState = enumState.state_released
+	var releaseTime = OS.get_ticks_msec()
+	var vibrateFor = min(releaseTime - startBigButtonPressedTime, 500)
+	print("vibrateFor" + str(vibrateFor))
+	Input.vibrate_handheld(vibrateFor)
+	 
